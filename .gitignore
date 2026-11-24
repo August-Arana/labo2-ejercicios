@@ -1,0 +1,6 @@
+orm/target/
+*.class
+.idea/
+.vscode/
+soluciones/_*.sql
+*.log

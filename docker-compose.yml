@@ -1,0 +1,54 @@
+# Labo II study environment.
+# Oracle is always started; Neo4j and MongoDB live behind the "nosql" profile.
+#   lab up          -> Oracle only
+#   lab up nosql    -> Oracle + Neo4j + MongoDB
+name: labo2
+
+services:
+  oracle:
+    image: gvenzl/oracle-free:23-slim-faststart
+    container_name: labo2-oracle
+    ports:
+      - "1521:1521"
+    environment:
+      ORACLE_PASSWORD: labo2admin      # SYS / SYSTEM password (local lab only)
+      APP_USER: labo                   # course schema owner
+      APP_USER_PASSWORD: labo
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./db/oracle/init:/container-entrypoint-initdb.d:ro
+      - ./db/oracle/schema:/opt/labo2/schema:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: labo2-neo4j
+    profiles: ["nosql"]
+    ports:
+      - "7474:7474"   # Neo4j Browser -> http://localhost:7474
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/labo2neo4j
+    volumes:
+      - neo4j-data:/data
+      - ./db/neo4j:/labo2:ro
+
+  mongo:
+    image: mongo:8
+    container_name: labo2-mongo
+    profiles: ["nosql"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+      - ./db/mongo:/docker-entrypoint-initdb.d:ro
+
+volumes:
+  oracle-data:
+  neo4j-data:
+  mongo-data:

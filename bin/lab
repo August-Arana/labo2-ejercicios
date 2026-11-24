@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# lab - helper CLI for the Labo II study environment.
+# Run `lab help` for the command list.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/labo2/env"
+[ -f "$ENV_FILE" ] && source "$ENV_FILE"
+
+OPT="${LABO2_OPT:-$HOME/.local/opt}"
+SQLCL="$OPT/sqlcl/bin/sql"
+SQLDEV="$OPT/sqldeveloper/sqldeveloper.sh"
+CONN="labo/labo@//localhost:1521/FREEPDB1"
+export JAVA_HOME="${LABO2_JAVA_HOME:-${JAVA_HOME:-}}"
+export SQLPATH="$REPO/setup/sqlcl"
+
+# Use docker directly if we are in the docker group already, otherwise via sg/sudo.
+dc() {
+  if docker info >/dev/null 2>&1; then docker "$@"
+  elif id -nG | grep -qw docker || getent group docker | grep -qw "$USER"; then sg docker -c "docker $(printf '%q ' "$@")"
+  else sudo docker "$@"; fi
+}
+compose() { dc compose --project-directory "$REPO" -f "$REPO/docker-compose.yml" "$@"; }
+
+wait_oracle() {
+  printf 'Waiting for Oracle'
+  for _ in $(seq 1 90); do
+    if [ "$(dc inspect -f '{{.State.Health.Status}}' labo2-oracle 2>/dev/null)" = healthy ]; then
+      echo ' ready.'; return 0
+    fi
+    printf '.'; sleep 3
+  done
+  echo; echo "Oracle did not become healthy. Check: lab logs" >&2; return 1
+}
+
+need_sqlcl() {
+  [ -x "$SQLCL" ] || { echo "SQLcl not found at $SQLCL. Run setup/install.sh" >&2; exit 1; }
+}
+
+usage() {
+  cat <<EOF
+lab - Labo II environment helper
+
+  lab up [nosql]        start Oracle (+ Neo4j and MongoDB with 'nosql')
+  lab down              stop every container (data is kept)
+  lab status            show containers
+  lab logs [service]    follow logs (default: oracle)
+
+  lab sql               interactive SQLcl session as LABO
+  lab run FILE.sql      run a script in SQLcl (serveroutput on, & prompts work)
+  lab sqldev            launch SQL Developer
+
+  lab reset [bdemobld|gremio|all]
+                        reload a schema from scratch (default: all).
+                        Use it after DML exercises that changed the data.
+  lab nuke              delete containers AND volumes (full fresh start)
+
+  lab cypher [FILE]     cypher-shell inside Neo4j (or run FILE). Browser: http://localhost:7474
+  lab mongo [FILE]      mongosh inside MongoDB (or run FILE.js)
+
+Connection data
+  Oracle   host=localhost port=1521 service=FREEPDB1 user=labo pass=labo
+           SYS/SYSTEM password: labo2admin
+  Neo4j    neo4j / labo2neo4j
+EOF
+}
+
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  up)
+    if [ "${1:-}" = nosql ]; then compose --profile nosql up -d; else compose up -d oracle; fi
+    wait_oracle ;;
+  down)    compose --profile nosql down ;;
+  status)  compose --profile nosql ps ;;
+  logs)    compose logs -f "${1:-oracle}" ;;
+  sql)
+    need_sqlcl; exec "$SQLCL" -L "$CONN" ;;
+  run)
+    need_sqlcl
+    [ $# -ge 1 ] || { echo "usage: lab run FILE.sql" >&2; exit 1; }
+    f="$(readlink -f "$1")"
+    [ -f "$f" ] || { echo "No such file: $1" >&2; exit 1; }
+    echo "── running $(basename "$f") ── $(date +%H:%M:%S)"
+    exec "$SQLCL" -S -L "$CONN" @"$REPO/setup/sqlcl/run.sql" "$f" ;;
+  sqldev)
+    [ -x "$SQLDEV" ] || { echo "SQL Developer not found at $SQLDEV. Run setup/install.sh" >&2; exit 1; }
+    nohup "$SQLDEV" >/dev/null 2>&1 & disown; echo "SQL Developer launching..." ;;
+  reset)
+    target="${1:-all}"
+    case "$target" in
+      bdemobld) files=(bdemobld.sql) ;;
+      gremio)   files=(gremio.sql) ;;
+      all)      files=(bdemobld.sql gremio.sql) ;;
+      *) echo "unknown schema: $target" >&2; exit 1 ;;
+    esac
+    for f in "${files[@]}"; do
+      echo "Reloading $f ..."
+      dc exec -i labo2-oracle sqlplus -s -L "$CONN" >/dev/null <<SQL
+set echo off feedback off termout off
+@/opt/labo2/schema/$f
+exit
+SQL
+    done
+    echo "Done." ;;
+  nuke)
+    read -r -p "This deletes ALL database data (your procedures/packages too). Type 'yes': " ok
+    [ "$ok" = yes ] && compose --profile nosql down -v ;;
+  cypher)
+    if [ $# -ge 1 ]; then dc exec -i labo2-neo4j cypher-shell -u neo4j -p labo2neo4j < "$1"
+    else dc exec -it labo2-neo4j cypher-shell -u neo4j -p labo2neo4j; fi ;;
+  mongo)
+    if [ $# -ge 1 ]; then dc exec -i labo2-mongo mongosh --quiet labo2 < "$1"
+    else dc exec -it labo2-mongo mongosh labo2; fi ;;
+  help|-h|--help) usage ;;
+  *) echo "unknown command: $cmd" >&2; usage; exit 1 ;;
+esac

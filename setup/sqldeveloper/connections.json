@@ -1,0 +1,25 @@
+{
+  "connections": [
+    {
+      "info": {
+        "role": "",
+        "SavePassword": "false",
+        "OracleConnectionType": "BASIC",
+        "RaptorConnectionType": "Oracle",
+        "serviceName": "FREEPDB1",
+        "driver": "oracle.jdbc.OracleDriver",
+        "hostname": "localhost",
+        "port": "1521",
+        "subtype": "oraJDBC",
+        "ConnName": "labo2",
+        "customUrl": "jdbc:oracle:thin:@//localhost:1521/FREEPDB1",
+        "oraDriverType": "thin",
+        "OS_AUTHENTICATION": "false",
+        "KERBEROS_AUTHENTICATION": "false",
+        "user": "labo"
+      },
+      "name": "labo2",
+      "type": "jdbc"
+    }
+  ]
+}

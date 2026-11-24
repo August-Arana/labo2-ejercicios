@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<persistence xmlns="https://jakarta.ee/xml/ns/persistence" version="3.0">
+  <!-- The "persistence unit" the EntityManagerFactory is built from. -->
+  <persistence-unit name="labo2" transaction-type="RESOURCE_LOCAL">
+    <class>labo2.orm.Product</class>
+    <!-- TODO (ORM-3): register your Gremio and Aventurero entities here -->
+    <properties>
+      <property name="jakarta.persistence.jdbc.driver" value="oracle.jdbc.OracleDriver"/>
+      <property name="jakarta.persistence.jdbc.url" value="jdbc:oracle:thin:@//localhost:1521/FREEPDB1"/>
+      <property name="jakarta.persistence.jdbc.user" value="labo"/>
+      <property name="jakarta.persistence.jdbc.password" value="labo"/>
+      <!-- Never let Hibernate touch the course tables' structure. -->
+      <property name="hibernate.hbm2ddl.auto" value="none"/>
+      <!-- Print the SQL Hibernate generates: the whole point of the exercise. -->
+      <property name="hibernate.show_sql" value="true"/>
+      <property name="hibernate.format_sql" value="true"/>
+    </properties>
+  </persistence-unit>
+</persistence>
